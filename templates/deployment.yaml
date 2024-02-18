@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "deployment.name" . }}
+  labels:
+    app: {{ include "deployment.name" . }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ include "deployment.fullname" . }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ include "deployment.fullname" . }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{ if  .Values.hostAliases.enabled }}
+      hostAliases:
+      {{- range .Values.hostAliases.values }}
+      - ip: {{ .ip }} 
+        hostnames:
+        - {{ .hostname }}
+      {{- end }} 
+      {{ end }}
+      securityContext:
+        fsGroup: 0
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "deployment.name" . }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            {{- range .Values.service.ports }}
+            - name: {{ .name }}
+              containerPort: {{ .port }}
+              protocol: {{ .protocol }}
+            {{- end }}
+          livenessProbe:
+            {{- if .Values.service.livenessProbe.enabled }}
+            {{- toYaml .Values.service.livenessProbe | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            {{- if .Values.service.readinessProbe.enabled }}
+            {{- toYaml .Values.service.readinessProbe | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+          - name: {{ .Values.logvolumes.name }}
+            mountPath: '{{ .Values.logvolumes.mountPath }}'
+          {{ if  .Values.Certificates.enabled }}
+          - name: {{ .Values.Certificates.volumename }}
+            mountPath: '{{ .Values.Certificates.mountpath }}'
+          {{if .Values.Certificates.env }}
+          env:
+          {{- range .Values.Certificates.env }}
+          - name: {{ .name }}
+            value: {{ .value }}
+            {{- end }}
+            {{- end }}
+          - name: {{ .Values.Certificates.envname }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.Certificates.secretname }}
+                key: {{ .Values.Certificates.secretkey }} 
+          {{ end }}
+      volumes:
+      - name: {{ .Values.logvolumes.name }}
+        persistentVolumeClaim:
+         claimName: {{ .Values.logvolumes.claimName }}
+      {{ if  .Values.Certificates.enabled }}
+      - name: {{ .Values.Certificates.volumename }}
+        persistentVolumeClaim:
+         claimName: {{ .Values.Certificates.claimName }}
+      {{ end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
